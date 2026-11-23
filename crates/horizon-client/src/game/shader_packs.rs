@@ -489,7 +489,17 @@ impl Game<'_> {
         let dev = DEV_PACK.get_or_init(|| std::env::var("HORIZON_SHADER_PACK").ok());
         let configured = dev.as_deref().unwrap_or(&self.settings.horizon.shader_pack);
         let mut picked = active_pack(configured, &self.settings.mods).to_owned();
-        if dev.is_none() && picked.is_empty() && bundled_pack_exists() && !too_small_for_pack() {
+        // The browser keeps the bundled pack off unless the player picked it: its programs are
+        // translated for WebGPU's four bind groups, and a device that rejects one draws the
+        // whole frame black with the reason only in the console. The built-in profile always
+        // draws, so the page opens into a world; Shader Options switches the pack back on.
+        let bundled_by_default = !cfg!(target_arch = "wasm32");
+        if dev.is_none()
+            && picked.is_empty()
+            && bundled_by_default
+            && bundled_pack_exists()
+            && !too_small_for_pack()
+        {
             picked = BUNDLED_PACK.to_owned();
         }
         (!picked.is_empty()).then_some(picked)
