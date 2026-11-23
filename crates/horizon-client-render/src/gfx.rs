@@ -126,6 +126,17 @@ pub mod pack_uniforms;
 mod pack_weather;
 mod page_runs;
 pub mod panorama;
+
+/// Whether a shader pack's programs are the ones being drawn, and how many uncaptured wgpu
+/// errors arrived since they were: a device that rejects a pack program draws a black frame
+/// and reports why only here, so the game can drop the pack instead of showing nothing.
+static PACK_APPLIED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static PACK_ERRORS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// How many errors the device reported while a pack was applied, and forget them.
+pub fn take_pack_errors() -> u32 {
+    PACK_ERRORS.swap(0, std::sync::atomic::Ordering::Relaxed)
+}
 mod readback;
 mod resident;
 mod stars;
@@ -1503,6 +1514,9 @@ async fn open_backend(
             let lost = device_lost.clone();
             device.on_uncaptured_error(std::sync::Arc::new(|error| {
                 log::error!("Horizon renderer: an uncaptured wgpu error: {error:?}");
+                if PACK_APPLIED.load(std::sync::atomic::Ordering::Relaxed) {
+                    PACK_ERRORS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
             }));
             device.set_device_lost_callback(move |reason, message| {
                 // A device destroyed on purpose was not lost.
@@ -4528,6 +4542,8 @@ impl Renderer {
         block_ids: &[i32],
         far_lod: bool,
     ) -> Option<(Vec<String>, Vec<String>)> {
+        PACK_APPLIED.store(pack.is_some(), std::sync::atomic::Ordering::Relaxed);
+        PACK_ERRORS.store(0, std::sync::atomic::Ordering::Relaxed);
         self.pack_far_lod = far_lod;
         if pack.is_none() {
             self.pack_atlas = None;

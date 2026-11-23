@@ -24,9 +24,31 @@ export function env_raw(name) {
 }
 
 export function horizon_console(level, message) {
-    if (level <= 1) console.error(message);
+    if (level <= 1) { console.error(message); showOnScreen(message); }
     else if (level === 2) console.warn(message);
     else console.log(message);
+}
+
+// The game's errors, on the page: a player who cannot open the console still needs to see
+// why a frame went black. A click closes the panel.
+function showOnScreen(message) {
+    try {
+        let panel = document.getElementById("horizon-errors");
+        if (!panel) {
+            panel = document.createElement("pre");
+            panel.id = "horizon-errors";
+            panel.style.cssText =
+                "position:fixed;left:8px;bottom:8px;max-width:70vw;max-height:38vh;overflow:auto;" +
+                "margin:0;padding:8px 10px;font:12px/1.45 ui-monospace,monospace;color:#ffd9d9;" +
+                "background:rgba(24,4,4,.88);border:1px solid #a34;border-radius:6px;" +
+                "z-index:2147483647;white-space:pre-wrap;pointer-events:auto;";
+            panel.title = "click to close";
+            panel.addEventListener("click", () => panel.remove());
+            document.body.appendChild(panel);
+            panel.textContent = "Game errors (click to close):\n";
+        }
+        panel.textContent += String(message).slice(0, 500) + "\n";
+    } catch (e) {}
 }
 
 export function horizon_js_stack() {

@@ -420,6 +420,21 @@ impl Game<'_> {
     /// Applies the pack the worker finished translating. The translation itself is on a worker,
     /// so this waits on nothing: the frame asks `pack_translation.is_some()` for its overlay.
     pub(super) fn drive_pack_translation(&mut self) {
+        // A device that rejects one of the pack's programs draws a black frame and says why only
+        // as an uncaptured error. Draw the built-in profile instead of leaving the player with
+        // nothing, and keep the pack off so it is not retried every frame.
+        if self.pack_ids.is_some()
+            && let Some(renderer) = &mut self.renderer
+            && horizon_client::gfx::take_pack_errors() > 0
+        {
+            let dimension = renderer.shader_pack_dimension().unwrap_or(0);
+            log::warn!(
+                "shader pack: the device rejected its programs; drawing the built-in profile"
+            );
+            self.pack_ids = None;
+            self.pack_failed = Some(dimension);
+            renderer.set_shader_pack(dimension, None, &[], false);
+        }
         let Some(job) = &mut self.pack_translation else {
             return;
         };
@@ -489,17 +504,7 @@ impl Game<'_> {
         let dev = DEV_PACK.get_or_init(|| std::env::var("HORIZON_SHADER_PACK").ok());
         let configured = dev.as_deref().unwrap_or(&self.settings.horizon.shader_pack);
         let mut picked = active_pack(configured, &self.settings.mods).to_owned();
-        // The browser keeps the bundled pack off unless the player picked it: its programs are
-        // translated for WebGPU's four bind groups, and a device that rejects one draws the
-        // whole frame black with the reason only in the console. The built-in profile always
-        // draws, so the page opens into a world; Shader Options switches the pack back on.
-        let bundled_by_default = !cfg!(target_arch = "wasm32");
-        if dev.is_none()
-            && picked.is_empty()
-            && bundled_by_default
-            && bundled_pack_exists()
-            && !too_small_for_pack()
-        {
+        if dev.is_none() && picked.is_empty() && bundled_pack_exists() && !too_small_for_pack() {
             picked = BUNDLED_PACK.to_owned();
         }
         (!picked.is_empty()).then_some(picked)
